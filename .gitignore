@@ -2,6 +2,7 @@ outputs/
 cache/
 .RData
 .Rhistory
+.Rproj.user
 data/*.csv
 data/*.tif
 data/*.rds
