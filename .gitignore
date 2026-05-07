@@ -1,0 +1,7 @@
+outputs/
+cache/
+.RData
+.Rhistory
+data/*.csv
+data/*.tif
+data/*.rds
