@@ -98,6 +98,8 @@ Receive <- function(sim) {
     return(invisible(sim))
   }
   incoming <- data.table::copy(sim$fallenSnags)
+  if (!"diameter_cm" %in% names(incoming))
+    stop("fallenSnags is missing the diameter_cm column. The snagDecay module being loaded is an old version that does not carry diameter_cm through snagTable. Re-run simInit() after updating DeadWood_snagDecay.")
   if (anyNA(incoming$diameter_cm) || any(incoming$diameter_cm < 7.5))
     stop(sprintf(
       "fallenSnags contains piece(s) with diameter_cm < 7.5 cm or NA. Smallest: %.4g cm. Check cohortData$diameter_cm for 0 or missing values.",
