@@ -1,3 +1,0 @@
-[submodule ".claude/spades.ai"]
-	path = .claude/spades.ai
-	url = https://github.com/AllenLarocque/spades.ai
