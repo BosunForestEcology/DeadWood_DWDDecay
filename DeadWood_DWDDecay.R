@@ -109,6 +109,11 @@ Receive <- function(sim) {
 Transition <- function(sim) {
   if (nrow(sim$DWDTable) == 0L) return(invisible(sim))
 
+  if (anyNA(sim$DWDTable$diameter_cm))
+    stop("DWDTable$diameter_cm contains NA. Ensure cohortData includes a non-NA diameter_cm column.")
+  if (anyNA(sim$DWDTable$ageSinceEntry))
+    stop("DWDTable$ageSinceEntry contains NA.")
+
   oldDC <- sim$DWDTable$DC
 
   transProb <- computeDWDTransProb(
@@ -118,6 +123,8 @@ Transition <- function(sim) {
     logistic_params = P(sim)$DWD_logisticParams
   )
 
+  if (anyNA(transProb))
+    stop("NA transition probabilities computed — check DWD_logisticParams and diameter_cm values.")
   didTransition <- stats::rbinom(length(transProb), 1L, transProb) == 1L
 
   sim$DWDTable[, ageSinceEntry := ageSinceEntry + 5L]
