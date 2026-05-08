@@ -97,18 +97,16 @@ Receive <- function(sim) {
   if (is.null(sim$fallenSnags) || nrow(sim$fallenSnags) == 0L) {
     return(invisible(sim))
   }
-  incoming <- data.table::copy(sim$fallenSnags)
-  if (!"diameter_cm" %in% names(incoming))
-    stop("fallenSnags is missing the diameter_cm column. The snagDecay module being loaded is an old version that does not carry diameter_cm through snagTable. Re-run simInit() after updating DeadWood_snagDecay.")
-  if (anyNA(incoming$diameter_cm) || any(incoming$diameter_cm < 7.5))
-    stop(sprintf(
-      "fallenSnags contains piece(s) with diameter_cm < 7.5 cm or NA. Smallest: %.4g cm. Check cohortData$diameter_cm for 0 or missing values.",
-      min(incoming$diameter_cm, na.rm = TRUE)
-    ))
   mat <- P(sim)$snagToDWD_DCmat
-  incoming[, DC            := vapply(DC, function(d) sample(4L, 1L, prob = mat[d, ]), integer(1L))]
-  incoming[, ageInDC       := 0L]
-  incoming[, ageSinceEntry := 0L]
+  incoming <- sim$fallenSnags[, .(
+    pixelID,
+    species,
+    DC            = vapply(DC, function(d) sample(4L, 1L, prob = mat[d, ]), integer(1L)),
+    ageInDC       = 0L,
+    ageSinceEntry = 0L,
+    initBiomass,
+    diameter_cm
+  )]
   sim$DWDTable <- data.table::rbindlist(list(sim$DWDTable, incoming))
   return(invisible(sim))
 }
