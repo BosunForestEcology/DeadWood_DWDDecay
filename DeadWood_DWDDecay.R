@@ -98,6 +98,11 @@ Receive <- function(sim) {
     return(invisible(sim))
   }
   incoming <- data.table::copy(sim$fallenSnags)
+  if (anyNA(incoming$diameter_cm) || any(incoming$diameter_cm < 7.5))
+    stop(sprintf(
+      "fallenSnags contains piece(s) with diameter_cm < 7.5 cm or NA. Smallest: %.4g cm. Check cohortData$diameter_cm for 0 or missing values.",
+      min(incoming$diameter_cm, na.rm = TRUE)
+    ))
   mat <- P(sim)$snagToDWD_DCmat
   incoming[, DC            := vapply(DC, function(d) sample(4L, 1L, prob = mat[d, ]), integer(1L))]
   incoming[, ageInDC       := 0L]
