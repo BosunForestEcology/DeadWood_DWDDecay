@@ -111,6 +111,9 @@ Transition <- function(sim) {
 
   if (anyNA(sim$DWDTable$diameter_cm))
     stop("DWDTable$diameter_cm contains NA. Ensure cohortData includes a non-NA diameter_cm column.")
+  if (any(sim$DWDTable$diameter_cm < 7.5))
+    stop(sprintf("DWDTable$diameter_cm has %d piece(s) below 7.5 cm minimum. Smallest: %.4g cm.",
+                 sum(sim$DWDTable$diameter_cm < 7.5), min(sim$DWDTable$diameter_cm)))
   if (anyNA(sim$DWDTable$ageSinceEntry))
     stop("DWDTable$ageSinceEntry contains NA.")
 
@@ -123,8 +126,13 @@ Transition <- function(sim) {
     logistic_params = P(sim)$DWD_logisticParams
   )
 
-  if (anyNA(transProb))
-    stop("NA transition probabilities computed — check DWD_logisticParams and diameter_cm values.")
+  if (anyNA(transProb)) {
+    i <- which(is.na(transProb))[1L]
+    stop(sprintf(
+      "NA transition probability for piece %d: DC=%d, ageSinceEntry=%d, diameter_cm=%.4g. ",
+      i, sim$DWDTable$DC[i], sim$DWDTable$ageSinceEntry[i], sim$DWDTable$diameter_cm[i]
+    ))
+  }
   didTransition <- stats::rbinom(length(transProb), 1L, transProb) == 1L
 
   sim$DWDTable[, ageSinceEntry := ageSinceEntry + 5L]
