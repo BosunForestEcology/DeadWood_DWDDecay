@@ -1,0 +1,252 @@
+DeadWood_DWDDecay
+================
+2026-05-11
+
+- [DeadWood_DWDDecay](#deadwood_dwddecay)
+  - [Inputs](#inputs)
+  - [Outputs](#outputs)
+  - [Parameters](#parameters)
+    - [Default logistic parameters
+      (`DWD_logisticParams`)](#default-logistic-parameters-dwd_logisticparams)
+    - [Default snag-to-DWD decay class mapping
+      (`snagToDWD_DCmat`)](#default-snag-to-dwd-decay-class-mapping-snagtodwd_dcmat)
+  - [Events](#events)
+    - [`init` (once, at simulation
+      start)](#init-once-at-simulation-start)
+    - [`receive` (every 5 years, priority
+      2)](#receive-every-5-years-priority-2)
+    - [`transition` (every 5 years, priority
+      3)](#transition-every-5-years-priority-3)
+  - [Event scheduling and module
+    interactions](#event-scheduling-and-module-interactions)
+  - [Usage example](#usage-example)
+  - [References](#references)
+  - [Package dependencies](#package-dependencies)
+
+# DeadWood_DWDDecay
+
+A [SpaDES](https://spades.predictiveecology.org/) module that manages
+the downed woody debris (DWD) pool. It receives fallen snags from
+`DeadWood_snagDecay`, maps their decay class onto the DWD scale
+(DC1–DC4), and advances each piece through decomposition using a time-
+and diameter-dependent logistic transition model. Pieces that pass
+through DC4 are removed as fully decomposed.
+
+Default parameters are calibrated for *Pinus strobus* (Eastern White
+Pine) using Vanderwel et al. (2006).
+
+------------------------------------------------------------------------
+
+## Inputs
+
+| Object | Class | Description |
+|----|----|----|
+| `fallenSnags` | `data.table` | Snags that fell in the current 5-year timestep, produced by `DeadWood_snagDecay`. Required columns: `pixelID` (integer), `species` (character), `DC` (integer, snag DC 1–5), `ageInDC` (integer), `initBiomass` (numeric, Mg ha⁻¹), `diameter_cm` (numeric, cm). |
+
+**Minimum diameter:** Any piece with `diameter_cm < 7.5 cm` will cause
+an error.
+
+------------------------------------------------------------------------
+
+## Outputs
+
+| Object | Class | Description |
+|----|----|----|
+| `DWDTable` | `data.table` | Current DWD inventory, updated every 5 years. Fully decomposed pieces (exited DC4) are removed. |
+
+`DWDTable` schema:
+
+| Column | Type | Description |
+|----|----|----|
+| `pixelID` | integer | Raster pixel of origin |
+| `species` | character | Tree species |
+| `DC` | integer | Current DWD decay class (1–4) |
+| `ageInDC` | integer | Years spent in the current DWD decay class |
+| `ageSinceEntry` | integer | Total years since the piece entered the DWD pool |
+| `initBiomass` | numeric | Biomass at time of death (Mg ha⁻¹); never modified after entry |
+| `diameter_cm` | numeric | Piece diameter (cm); never modified after entry |
+
+**Note on the DWD decay class scale:** The DWD pool uses a 4-class
+scale. DWD DC4 combines what would be snag DC4 and DC5 on the snag scale
+— both represent highly decomposed material on the forest floor.
+
+------------------------------------------------------------------------
+
+## Parameters
+
+| Parameter | Type | Default | Range | Description |
+|----|----|----|----|----|
+| `DWD_logisticParams` | `data.table` | See below | — | 4-row table of logistic transition parameters. Row *i* governs the transition from DWD DC*i* to DC*i*+1 (or out of the pool for row 4). Source: paper appendix. |
+| `snagToDWD_DCmat` | matrix | See below | — | 5×4 probability matrix mapping snag DC at fall (rows 1–5) to DWD DC entered (columns 1–4). Source: Vanderwel et al. (2006) Table 4. |
+
+### Default logistic parameters (`DWD_logisticParams`)
+
+``` r
+data.table::data.table(
+  a0 = c(-7.295, -9.663,  3.882, -5.584),
+  a1 = c( 1.888,  0.000, -2.986,  0.000),
+  b0 = c( 1.325,  0.934, -0.076,  0.149),
+  b1 = c(-0.239,  0.000,  0.093,  0.000)
+)
+# Row 1: DC1 → DC2;  Row 2: DC2 → DC3
+# Row 3: DC3 → DC4;  Row 4: DC4 → out (fully decomposed)
+```
+
+Parameters `a` and `b` in the logistic model are piece-specific and
+depend on diameter (see formula below).
+
+### Default snag-to-DWD decay class mapping (`snagToDWD_DCmat`)
+
+Rows are snag DC at time of fall; columns are DWD DC entered:
+
+``` r
+matrix(c(
+  0.000, 0.162, 0.815, 0.023,  # snag DC1
+  0.000, 0.078, 0.871, 0.052,  # snag DC2
+  0.000, 0.036, 0.854, 0.111,  # snag DC3
+  0.000, 0.016, 0.762, 0.222,  # snag DC4
+  0.000, 0.007, 0.599, 0.395   # snag DC5
+), nrow = 5, byrow = TRUE,
+dimnames = list(paste0("snagDC", 1:5), paste0("DWDDC", 1:4)))
+```
+
+Regardless of snag DC, fallen snags nearly always enter the DWD pool at
+DC2 or DC3. DC1 entry probability is zero for all snag classes,
+reflecting the observation that snags are already partially decomposed
+by the time they fall.
+
+------------------------------------------------------------------------
+
+## Events
+
+The module fires three event types.
+
+### `init` (once, at simulation start)
+
+- Validates that `DWD_logisticParams` is a 4-row `data.table` and
+  `snagToDWD_DCmat` is a 5×4 matrix.
+- Creates an empty `DWDTable` with the correct schema.
+- Schedules `receive` (priority 2) and `transition` (priority 3) at
+  `start(sim) + 5`.
+
+### `receive` (every 5 years, priority 2)
+
+Runs before `transition` within the same timestep. Accepts any fallen
+snags from `sim$fallenSnags`:
+
+1.  For each piece, samples a DWD entry DC from the row of
+    `snagToDWD_DCmat` corresponding to the piece’s snag DC:
+
+$$\text{DWD-DC}_\text{entry} \sim \text{Categorical}\!\left(\text{snagToDWD\_DCmat}[\text{snag-DC},\, \cdot\,]\right)$$
+
+2.  Sets `ageInDC = 0` and `ageSinceEntry = 0` for all incoming pieces.
+3.  Appends the new pieces to `DWDTable`.
+
+If `fallenSnags` is empty or `NULL`, `receive` does nothing.
+
+### `transition` (every 5 years, priority 3)
+
+Advances all pieces currently in `DWDTable` through the logistic decay
+model:
+
+**Step 1 — Compute piece-specific logistic parameters**
+
+For each piece, parameters `a` and `b` are derived from piece diameter
+using the logistic parameter row for the piece’s current DC:
+
+$$a = a_0 + a_1 \cdot \ln(D)$$ $$b = b_0 + b_1 \cdot \ln(D)$$
+
+where $D$ is `diameter_cm` and $(a_0, a_1, b_0, b_1)$ come from the row
+of `DWD_logisticParams` indexed by the piece’s current DC.
+
+**Step 2 — Logistic survival function**
+
+The cumulative probability that a piece has *not yet* transitioned to
+the next DC by age $t$ (years since DWD entry) is given by:
+
+$$S(t) = \frac{1}{1 + e^{a + b \cdot t}}$$
+
+**Step 3 — Conditional transition probability**
+
+For a piece at age $A$ (= `ageSinceEntry`), the probability that it
+transitions during the next 5-year interval $[A,\, A+5]$, given that it
+has not yet transitioned, is:
+
+$$p_\text{transition} = \frac{S(A) - S(A+5)}{S(A)}$$
+
+This is the conditional probability: the fraction of pieces that survive
+to age $A$ but not to age $A+5$. The result is clamped to $[0, 1]$. If
+$S(A) \approx 0$ (piece is essentially certain to have transitioned
+already), the probability is set to 1.
+
+**Step 4 — Stochastic transition and removal**
+
+Each piece independently draws a transition outcome:
+
+$$\text{Transition} \sim \text{Bernoulli}(p_\text{transition})$$
+
+- Pieces that transition: `DC` increments by 1; `ageInDC` resets to 0.
+- Pieces that do not transition: `DC` unchanged; `ageInDC` increments by
+  5.
+- All pieces: `ageSinceEntry` increments by 5 regardless.
+- Pieces with `DC > 4` are removed from `DWDTable` (fully decomposed).
+
+------------------------------------------------------------------------
+
+## Event scheduling and module interactions
+
+| Priority | Module | Event | Purpose |
+|----|----|----|----|
+| 1 | `DeadWood_snagDecay` | `transition` | Advance snag DC, produce `fallenSnags` |
+| 2 | `DeadWood_DWDDecay` | `receive` | Accept `fallenSnags` into DWD pool |
+| 3 | `DeadWood_DWDDecay` | `transition` | Advance DWD DC via logistic model |
+| 4 | `DeadWood_Biomass` | `transition` | Compute biomass rasters from updated pools |
+
+The `receive` event (priority 2) fires before `transition` (priority 3)
+within the same timestep, ensuring newly fallen snags are incorporated
+before any DC advancement occurs.
+
+------------------------------------------------------------------------
+
+## Usage example
+
+``` r
+library(SpaDES.core)
+
+# fallenSnags would normally be supplied by DeadWood_snagDecay
+fallenSnags <- data.table::data.table(
+  pixelID     = c(1L, 1L),
+  species     = "Pinus strobus",
+  DC          = c(2L, 3L),        # snag DC at time of fall
+  ageInDC     = c(10L, 5L),
+  initBiomass = c(12.5, 8.3),     # Mg ha-1
+  diameter_cm = c(22.0, 18.5)
+)
+
+mySim <- simInit(
+  times   = list(start = 0, end = 50),
+  params  = list(),
+  modules = list("DeadWood_DWDDecay"),
+  objects = list(fallenSnags = fallenSnags)
+)
+
+mySim <- spades(mySim)
+mySim$DWDTable
+```
+
+------------------------------------------------------------------------
+
+## References
+
+Vanderwel, M.C., Malcolm, J.R., Smith, S.M., and Islam, N. (2006). An
+integrated model for snag and downed woody debris decay class
+transition. *Forest Ecology and Management*, 234(1–3), 48–59.
+<https://doi.org/10.1016/j.foreco.2006.06.020>
+
+------------------------------------------------------------------------
+
+## Package dependencies
+
+- [`SpaDES.core`](https://github.com/PredictiveEcology/SpaDES.core) (\>=
+  3.0.0)
+- [`data.table`](https://CRAN.R-project.org/package=data.table)
