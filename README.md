@@ -15,7 +15,7 @@ exiting DC4 are removed as fully decomposed.
 
 | Object | Class | Description |
 |----|----|----|
-| `fallenSnags` | `data.table` | Snags that fell in the current 5-year timestep, produced by `DeadWood_snagDecay`. Required columns: `pixelID` (integer), `species` (character), `DC` (integer, snag DC 1–5), `ageInDC` (integer), `initBiomass` (numeric, Mg ha⁻¹), `diameter_cm` (numeric, cm). |
+| `fallenSnags` | `data.table` | Snags that fell in the current 5-year timestep, produced by `DeadWood_snagDecay`. Required columns: `pixelID` (integer), `species` (character), `DC` (integer, snag DC 1–5), `initBiomass` (numeric, Mg ha⁻¹), `diameter_cm` (numeric, cm). |
 
 **Minimum diameter:** Any piece with `diameter_cm < 7.5 cm` will cause
 an error.
@@ -41,6 +41,14 @@ an error.
 **Note on the DWD decay class scale:** The DWD pool uses a 4-class
 scale. DWD DC4 combines what would be snag DC4 and DC5 — both represent
 highly decomposed material on the forest floor.
+
+**`ageInDC` vs `ageSinceEntry`:** These two columns track time
+differently. `ageInDC` counts years spent in the *current* decay class
+and resets to zero every time a piece advances to a new class — it
+measures how long a piece has been at its present level of decay.
+`ageSinceEntry` counts total years since the piece first entered the DWD
+pool and never resets — it is the age variable (*A*) used in the
+logistic transition probability calculation.
 
 ## Parameters
 
@@ -69,6 +77,11 @@ $$a = a_0 + a_1 \ln(D), \qquad b = b_0 + b_1 \ln(D)$$
 These feed into a logistic survival function used to compute conditional
 transition probabilities — see the Events section for the full
 derivation.
+
+**Note:** The transition calculation assumes a fixed 5-year interval
+matching the module’s timestep. This interval is hardcoded in
+`computeDWDTransProb()` (`R/dwd-transition.R`). If the module timestep
+were changed, this function would also need to be updated.
 
 Default fitted coefficients (Vanderwel et al. 2006):
 
@@ -154,9 +167,9 @@ For a piece at age $A$ (`ageSinceEntry`), the probability of
 transitioning during the next 5-year interval $[A,\, A+5]$, given it has
 not yet transitioned, is:
 
-$$p_\text{transition} = \frac{S(A) - S(A+5)}{S(A)}$$
+$$p_\text{transition} = \frac{Pr(A) - Pr(A+5)}{Pr(A)}$$
 
-This is clamped to $[0, 1]$. If $S(A) \approx 0$ the piece is set to
+This is clamped to $[0, 1]$. If $Pr(A) \approx 0$ the piece is set to
 transition with certainty.
 
 **Step 4 — Stochastic transition and removal**

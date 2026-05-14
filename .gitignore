@@ -6,3 +6,4 @@ cache/
 data/*.csv
 data/*.tif
 data/*.rds
+.Rprofile
