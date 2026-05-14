@@ -6,9 +6,9 @@ defineModule(sim, list(
                  and advances each piece through decay using a time- and diameter-dependent logistic
                  transition model. Pieces exiting DC4 are removed as fully decomposed.",
   keywords    = c("dead wood", "DWD", "downed woody debris", "decay class", "logistic"),
-  authors     = structure(list(list(given = "First", family = "Last",
+  authors     = structure(list(list(given = "Thomson", family = "Harris",
                                     role = c("aut", "cre"),
-                                    email = "email@example.com", comment = NULL)),
+                                    email = "BosunForestEcology@gmail.com", comment = NULL)),
                            class = "person"),
   childModules = character(0),
   version     = list(DeadWood_DWDDecay = "0.0.1"),
