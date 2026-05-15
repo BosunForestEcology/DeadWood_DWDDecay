@@ -181,12 +181,17 @@ $$\text{Transition} \sim \text{Bernoulli}(p_\text{transition})$$
 
 ## Event scheduling and module interactions
 
-| Priority | Module | Event | Purpose |
-|----------|--------|-------|---------|
-| 1 | `DeadWood_snagDecay` | `transition` | Advance snag DC, produce `fallenSnags` |
-| 2 | `DeadWood_DWDDecay` | `receive` | Accept `fallenSnags` into DWD pool |
-| 3 | `DeadWood_DWDDecay` | `transition` | Advance DWD DC via logistic model |
-| 4 | `DeadWood_Biomass` | `transition` | Compute biomass rasters from updated pools |
+`DeadWood_Mortality` fires every year; the remaining modules fire every 5 years.
+Priority determines order only among events scheduled at the same simulation time.
+
+| Timestep | Priority | Module | Event | Purpose |
+|----------|----------|--------|-------|---------|
+| every 1 yr | 0 | `DeadWood_Mortality` | `transition` | Apply baseline mortality, append to `cohortData` |
+| every 5 yr | 1 | `DeadWood_snagDecay` | `transition` | Advance snag DC, produce `fallenSnags` |
+| every 5 yr | 2 | `DeadWood_DWDDecay` | `receive` | Accept `fallenSnags` into DWD pool ← **this module** |
+| every 5 yr | 3 | `DeadWood_DWDDecay` | `transition` | Advance DWD DC via logistic model ← **this module** |
+| every 5 yr | 4 | `DeadWood_Biomass` | `transition` | Compute biomass rasters from updated pools |
+| every 5 yr | 5 | `DeadWood_Biomass` | `plot` | Capture biomass snapshots |
 
 The `receive` event (priority 2) fires before `transition` (priority 3) within
 the same timestep, ensuring newly fallen snags are incorporated before any
