@@ -1,6 +1,5 @@
 DeadWood_DWDDecay
 ================
-2026-05-15
 
 ## Overview
 
